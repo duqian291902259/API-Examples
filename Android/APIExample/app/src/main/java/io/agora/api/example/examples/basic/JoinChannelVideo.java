@@ -1,13 +1,19 @@
 package io.agora.api.example.examples.basic;
 
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
+import android.app.Activity;
 import android.content.Context;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.SurfaceView;
+import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -52,13 +58,16 @@ public class JoinChannelVideo extends BaseFragment implements View.OnClickListen
 {
     private static final String TAG = JoinChannelVideo.class.getSimpleName();
 
-    private FrameLayout fl_local, fl_remote, fl_remote_2, fl_remote_3;
+    private FrameLayout fl_local, fl_remote, fl_remote_2, fl_remote_3, fl_preview;
     private Button join;
     private EditText et_channel;
     private RtcEngine engine;
     private int myUid;
     private boolean joined = false;
     private Map<Integer, ViewGroup> remoteViews = new ConcurrentHashMap<Integer, ViewGroup>();
+    private boolean isVideoViewClicked = false;
+    private int previewWidth = 0;
+    private int previewHeight = 0;
 
     @Nullable
     @Override
@@ -79,6 +88,16 @@ public class JoinChannelVideo extends BaseFragment implements View.OnClickListen
         fl_remote = view.findViewById(R.id.fl_remote);
         fl_remote_2 = view.findViewById(R.id.fl_remote2);
         fl_remote_3 = view.findViewById(R.id.fl_remote3);
+        fl_preview = view.findViewById(R.id.fl_preview);
+        fl_preview.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                view.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+
+                previewHeight = fl_preview.getHeight();
+                previewWidth = fl_preview.getWidth();
+            }
+        });
     }
 
     @Override
@@ -91,6 +110,7 @@ public class JoinChannelVideo extends BaseFragment implements View.OnClickListen
         {
             return;
         }
+
         try
         {
             RtcEngineConfig config = new RtcEngineConfig();
@@ -202,13 +222,51 @@ public class JoinChannelVideo extends BaseFragment implements View.OnClickListen
         }
 
         // Create render view by RtcEngine
-        SurfaceView surfaceView = new SurfaceView(context);
-        if(fl_local.getChildCount() > 0)
+        TextureView surfaceView = new TextureView(context);
+        if(fl_preview.getChildCount() > 0)
         {
-            fl_local.removeAllViews();
+            fl_preview.removeAllViews();
         }
+        DisplayMetrics displayMetrics = new DisplayMetrics();
+        ((Activity) getContext()).getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
+        final int screenHeight = displayMetrics.heightPixels;
+        final int screenWidth = displayMetrics.widthPixels;
+
+        fl_preview.setOnClickListener(v -> {
+            this.isVideoViewClicked = !this.isVideoViewClicked;
+
+            if (this.isVideoViewClicked) {
+                final int flPreviewWidth = fl_preview.getWidth();
+                final int flPreviewHeight = fl_preview.getHeight();
+
+                ValueAnimator anim = ValueAnimator.ofInt(0, 500);
+                anim.addUpdateListener(valueAnimator -> {
+                    int val = (Integer) valueAnimator.getAnimatedValue();
+                    ViewGroup.LayoutParams layoutParams = v.getLayoutParams();
+                    layoutParams.width = flPreviewWidth - val;
+                    layoutParams.height = flPreviewHeight - val;
+                    v.setLayoutParams(layoutParams);
+                });
+                anim.setDuration(300);
+                anim.start();
+            } else {
+                final int flPreviewWidth = fl_preview.getWidth();
+                final int flPreviewHeight = fl_preview.getHeight();
+
+                ValueAnimator anim = ValueAnimator.ofInt(0, 500);
+                anim.addUpdateListener(valueAnimator -> {
+                    int val = (Integer) valueAnimator.getAnimatedValue();
+                    ViewGroup.LayoutParams layoutParams = v.getLayoutParams();
+                    layoutParams.width = flPreviewWidth + val;
+                    layoutParams.height = flPreviewHeight + val;
+                    v.setLayoutParams(layoutParams);
+                });
+                anim.setDuration(300);
+                anim.start();
+            }
+        });
         // Add to the local container
-        fl_local.addView(surfaceView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        fl_preview.addView(surfaceView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         // Setup local video to render your local camera preview
         engine.setupLocalVideo(new VideoCanvas(surfaceView, RENDER_MODE_HIDDEN, 0));
         // Set audio route to microPhone
